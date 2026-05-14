@@ -3,12 +3,74 @@ import asyncio
 import random
 import math
 import array
-import torch
+try:
+    import torch
+    from models.neural import model, load_model
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    import json
+    class DQN_Fallback:
+        def __init__(self, weights_path='dqn_weights.json'):
+            self.weights = {}
+            if os.path.exists(weights_path):
+                with open(weights_path, 'r') as f:
+                    self.weights = json.load(f)
+            else:
+                print('No JSON weights found!')
+        
+        def relu(self, x):
+            return [max(0, v) for v in x]
+            
+        def linear(self, x, weight, bias):
+            out = []
+            for i in range(len(weight)):
+                val = bias[i]
+                for j in range(len(x)):
+                    val += x[j] * weight[i][j]
+                out.append(val)
+            return out
+            
+        def layer_norm(self, x, weight, bias, eps=1e-5):
+            mean = sum(x) / len(x)
+            var = sum((v - mean) ** 2 for v in x) / len(x)
+            std = (var + eps) ** 0.5
+            return [weight[i] * (x[i] - mean) / std + bias[i] for i in range(len(x))]
+            
+        def forward(self, x):
+            w = self.weights
+            if not w: return 0.0
+            x = list(x)
+            x = self.linear(x, w['encoder.0.weight'], w['encoder.0.bias'])
+            x = self.layer_norm(x, w['encoder.1.weight'], w['encoder.1.bias'])
+            x = self.relu(x)
+            x = self.linear(x, w['encoder.3.weight'], w['encoder.3.bias'])
+            x = self.layer_norm(x, w['encoder.4.weight'], w['encoder.4.bias'])
+            x = self.relu(x)
+            x = self.linear(x, w['encoder.6.weight'], w['encoder.6.bias'])
+            x = self.layer_norm(x, w['encoder.7.weight'], w['encoder.7.bias'])
+            x = self.relu(x)
+            v = self.linear(x, w['value_stream.0.weight'], w['value_stream.0.bias'])
+            v = self.relu(v)
+            v = self.linear(v, w['value_stream.2.weight'], w['value_stream.2.bias'])
+            return v[0]
+            
+        def item(self):
+            return self.last_val
+            
+        def __call__(self, x):
+            self.last_val = self.forward(x)
+            return self
+
+    model = DQN_Fallback()
+    def load_model(path):
+        return len(model.weights) > 0
+
 import pygame
 from env.pieces import rotate
 from env.tetris_env import TetrisEnv
-from models.neural import model, load_model
 from renderer import Renderer, WIDTH, HEIGHT
+
 
 MODEL_PATH = "dqn_model.pth"
 
@@ -126,8 +188,11 @@ def choose_action(env, epsilon=0.0):
 
     for action in valid_actions:
         sim_state, sim_reward, sim_done = env.simulate_step(action)
-        with torch.no_grad():
-            value = model(torch.tensor(sim_state, dtype=torch.float32)).item()
+        if TORCH_AVAILABLE:
+            with torch.no_grad():
+                value = model(torch.tensor(sim_state, dtype=torch.float32)).item()
+        else:
+            value = model(sim_state).item()
 
         score = sim_reward if sim_done else sim_reward + 0.99 * value
         if score > best_score:
