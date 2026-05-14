@@ -7,13 +7,13 @@ BOARD_WIDTH = CELL_SIZE * COLUMNS
 WIDTH = BOARD_WIDTH + 180
 HEIGHT = CELL_SIZE * ROWS
 
-BACKGROUND = (10, 18, 40)
-BOARD_BG = (15, 26, 60)
-PANEL_BG = (20, 40, 90)
-GRID_COLOR = (35, 65, 110)
-BORDER_COLOR = (80, 180, 215)
-BLOCK_COLOR = (76, 222, 255)
-PIECE_COLOR = (255, 255, 255)
+BACKGROUND = (0, 0, 0)
+BOARD_BG = (0, 0, 0)
+PANEL_BG = (0, 0, 0)
+GRID_COLOR = (0, 255, 0)
+BORDER_COLOR = (255, 0, 0)
+BLOCK_COLOR = (255, 0, 0)
+PIECE_COLOR = (0, 255, 0)
 TEXT_COLOR = (235, 235, 235)
 GAME_OVER_COLOR = (220, 60, 60)
 
@@ -64,7 +64,7 @@ class Renderer:
         side_x = BOARD_WIDTH + 20
         self.screen.blit(self.title_font.render("TETRIS RL", True, TEXT_COLOR), (side_x, 20))
         self.screen.blit(self.small_font.render(f"SCORE", True, TEXT_COLOR), (side_x, 70))
-        self.screen.blit(self.large_font.render(str(score), True, TEXT_COLOR), (side_x, 100))
+        self.screen.blit(self.large_font.render(str(int(score)), True, TEXT_COLOR), (side_x, 100))
 
         self.screen.blit(self.small_font.render(f"LINES", True, TEXT_COLOR), (side_x, 170))
         self.screen.blit(self.large_font.render(str(lines), True, TEXT_COLOR), (side_x, 200))

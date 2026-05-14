@@ -43,7 +43,9 @@ active_x = 3
 active_y = 0
 pending_action = None
 mode = MENU
-button_rect = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 2 + 20, 240, 60)
+btn_level1 = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 2 - 10, 240, 50)
+btn_level2 = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 2 + 50, 240, 50)
+btn_level3 = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 2 + 110, 240, 50)
 
 def make_sound(frequency=440, duration_ms=180, volume=0.15):
     sample_rate = 44100
@@ -91,10 +93,17 @@ def draw_menu():
     subtitle_rect = subtitle.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 70))
     renderer.screen.blit(subtitle, subtitle_rect)
 
-    pygame.draw.rect(renderer.screen, (0, 204, 204), button_rect, border_radius=12)
-    button_text = font_button.render("START GAME", True, (10, 10, 30))
-    button_rect_text = button_text.get_rect(center=button_rect.center)
-    renderer.screen.blit(button_text, button_rect_text)
+    pygame.draw.rect(renderer.screen, (0, 204, 204), btn_level1, border_radius=12)
+    l1_text = font_button.render("LEVEL 1 (EXPERT)", True, (10, 10, 30))
+    renderer.screen.blit(l1_text, l1_text.get_rect(center=btn_level1.center))
+
+    pygame.draw.rect(renderer.screen, (0, 204, 204), btn_level2, border_radius=12)
+    l2_text = font_button.render("LEVEL 2 (MEDIUM)", True, (10, 10, 30))
+    renderer.screen.blit(l2_text, l2_text.get_rect(center=btn_level2.center))
+
+    pygame.draw.rect(renderer.screen, (0, 204, 204), btn_level3, border_radius=12)
+    l3_text = font_button.render("LEVEL 3 (NOVICE)", True, (10, 10, 30))
+    renderer.screen.blit(l3_text, l3_text.get_rect(center=btn_level3.center))
 
     info_text = font_text.render("Use the trained agent model. Close the window to quit.", True, (200, 200, 200))
     info_rect = info_text.get_rect(center=(WIDTH // 2, HEIGHT - 40))
@@ -139,11 +148,24 @@ while not done:
         if event.type == pygame.QUIT:
             done = True
         elif mode == MENU:
-            if event.type == pygame.MOUSEBUTTONDOWN and button_rect.collidepoint(event.pos):
-                mode = PLAY
-                menu_channel.stop()
-                start_sound.play()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_level1.collidepoint(event.pos):
+                    epsilon = 0.0
+                    mode = PLAY
+                    menu_channel.stop()
+                    start_sound.play()
+                elif btn_level2.collidepoint(event.pos):
+                    epsilon = 0.2
+                    mode = PLAY
+                    menu_channel.stop()
+                    start_sound.play()
+                elif btn_level3.collidepoint(event.pos):
+                    epsilon = 0.5
+                    mode = PLAY
+                    menu_channel.stop()
+                    start_sound.play()
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                epsilon = 0.0
                 mode = PLAY
                 menu_channel.stop()
                 start_sound.play()
@@ -155,10 +177,23 @@ while not done:
             if pending_action is None:
                 pending_action = choose_action(env, epsilon)
                 if pending_action is not None:
-                    rotation, active_x = pending_action
-                    active_piece = rotated_piece(env.current_shape[0], rotation)
-                    active_y = 0
-                    current_fall_delay = choose_fall_delay()
+                    if len(pending_action) == 2: # old model
+                        rotation, active_x = pending_action
+                        active_piece = rotated_piece(env.current_shape[0], rotation)
+                        active_y = 0
+                        active_path = []
+                    else:
+                        rotation, final_x, final_y, path = pending_action
+                        active_path = path
+                        active_path_index = 0
+                        if len(active_path) > 0:
+                            cur_r, active_x, active_y = active_path[0]
+                            active_piece = rotated_piece(env.current_shape[0], cur_r)
+                        else:
+                            active_piece = rotated_piece(env.current_shape[0], 0)
+                            active_x = 3
+                            active_y = 0
+                    current_fall_delay = 120 # Optimized speed for watching rotations and tucks
                 else:
                     game_over = True
 
@@ -166,14 +201,22 @@ while not done:
                 fall_time += dt
                 if fall_time >= current_fall_delay:
                     fall_time = 0
-                    if env.board.is_valid_position(active_piece, active_x, active_y + 1):
+                    
+                    if len(pending_action) > 2 and active_path_index < len(active_path):
+                        cur_r, active_x, active_y = active_path[active_path_index]
+                        active_piece = rotated_piece(env.current_shape[0], cur_r)
+                        active_path_index += 1
+                    elif len(pending_action) == 2 and env.board.is_valid_position(active_piece, active_x, active_y + 1):
                         active_y += 1
                     else:
                         next_state, reward, game_over = env.step(pending_action)
                         if reward > 0:
-                            lines += reward // 10
-                            score += reward
-                            level = max(1, 1 + lines // 10)
+                            pass
+                        
+                        score += reward
+                        lines = getattr(env, '_total_lines', lines + 1 if reward > 0 else lines)
+                        level = max(1, 1 + lines // 10)
+                        
                         if reward >= 0:
                             land_sound.play()
                         state = next_state
