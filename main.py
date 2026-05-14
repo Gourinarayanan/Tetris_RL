@@ -1,4 +1,5 @@
 import os
+import asyncio
 import random
 import math
 import array
@@ -143,93 +144,103 @@ def rotated_piece(shape, rotation):
     return rotated
 
 
-while not done:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            done = True
-        elif mode == MENU:
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if btn_level1.collidepoint(event.pos):
+async def main():
+    global done, mode, epsilon, pending_action, active_piece, active_x, active_y
+    global game_over, fall_time, current_fall_delay, score, lines, level, dt, state, printed_game_over
+
+    active_path = []
+    active_path_index = 0
+
+    while not done:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                done = True
+            elif mode == MENU:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if btn_level1.collidepoint(event.pos):
+                        epsilon = 0.0
+                        mode = PLAY
+                        menu_channel.stop()
+                        start_sound.play()
+                    elif btn_level2.collidepoint(event.pos):
+                        epsilon = 0.2
+                        mode = PLAY
+                        menu_channel.stop()
+                        start_sound.play()
+                    elif btn_level3.collidepoint(event.pos):
+                        epsilon = 0.5
+                        mode = PLAY
+                        menu_channel.stop()
+                        start_sound.play()
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     epsilon = 0.0
                     mode = PLAY
                     menu_channel.stop()
                     start_sound.play()
-                elif btn_level2.collidepoint(event.pos):
-                    epsilon = 0.2
-                    mode = PLAY
-                    menu_channel.stop()
-                    start_sound.play()
-                elif btn_level3.collidepoint(event.pos):
-                    epsilon = 0.5
-                    mode = PLAY
-                    menu_channel.stop()
-                    start_sound.play()
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                epsilon = 0.0
-                mode = PLAY
-                menu_channel.stop()
-                start_sound.play()
 
-    if mode == MENU:
-        draw_menu()
-    else:
-        if not game_over:
-            if pending_action is None:
-                pending_action = choose_action(env, epsilon)
-                if pending_action is not None:
-                    if len(pending_action) == 2: # old model
-                        rotation, active_x = pending_action
-                        active_piece = rotated_piece(env.current_shape[0], rotation)
-                        active_y = 0
-                        active_path = []
-                    else:
-                        rotation, final_x, final_y, path = pending_action
-                        active_path = path
-                        active_path_index = 0
-                        if len(active_path) > 0:
-                            cur_r, active_x, active_y = active_path[0]
-                            active_piece = rotated_piece(env.current_shape[0], cur_r)
-                        else:
-                            active_piece = rotated_piece(env.current_shape[0], 0)
-                            active_x = 3
+        if mode == MENU:
+            draw_menu()
+        else:
+            if not game_over:
+                if pending_action is None:
+                    pending_action = choose_action(env, epsilon)
+                    if pending_action is not None:
+                        if len(pending_action) == 2: # old model
+                            rotation, active_x = pending_action
+                            active_piece = rotated_piece(env.current_shape[0], rotation)
                             active_y = 0
-                    current_fall_delay = 120 # Optimized speed for watching rotations and tucks
-                else:
-                    game_over = True
-
-            if pending_action is not None and not game_over:
-                fall_time += dt
-                if fall_time >= current_fall_delay:
-                    fall_time = 0
-                    
-                    if len(pending_action) > 2 and active_path_index < len(active_path):
-                        cur_r, active_x, active_y = active_path[active_path_index]
-                        active_piece = rotated_piece(env.current_shape[0], cur_r)
-                        active_path_index += 1
-                    elif len(pending_action) == 2 and env.board.is_valid_position(active_piece, active_x, active_y + 1):
-                        active_y += 1
+                            active_path = []
+                        else:
+                            rotation, final_x, final_y, path = pending_action
+                            active_path = path
+                            active_path_index = 0
+                            if len(active_path) > 0:
+                                cur_r, active_x, active_y = active_path[0]
+                                active_piece = rotated_piece(env.current_shape[0], cur_r)
+                            else:
+                                active_piece = rotated_piece(env.current_shape[0], 0)
+                                active_x = 3
+                                active_y = 0
+                        current_fall_delay = 120 # Optimized speed for watching rotations and tucks
                     else:
-                        next_state, reward, game_over = env.step(pending_action)
-                        if reward > 0:
-                            pass
+                        game_over = True
+
+                if pending_action is not None and not game_over:
+                    fall_time += dt
+                    if fall_time >= current_fall_delay:
+                        fall_time = 0
                         
-                        score += reward
-                        lines = getattr(env, '_total_lines', lines + 1 if reward > 0 else lines)
-                        level = max(1, 1 + lines // 10)
-                        
-                        if reward >= 0:
-                            land_sound.play()
-                        state = next_state
-                        pending_action = None
-                        active_piece = None
+                        if len(pending_action) > 2 and active_path_index < len(active_path):
+                            cur_r, active_x, active_y = active_path[active_path_index]
+                            active_piece = rotated_piece(env.current_shape[0], cur_r)
+                            active_path_index += 1
+                        elif len(pending_action) == 2 and env.board.is_valid_position(active_piece, active_x, active_y + 1):
+                            active_y += 1
+                        else:
+                            next_state, reward, game_over = env.step(pending_action)
+                            if reward > 0:
+                                pass
+                            
+                            score += reward
+                            lines = getattr(env, '_total_lines', lines + 1 if reward > 0 else lines)
+                            level = max(1, 1 + lines // 10)
+                            
+                            if reward >= 0:
+                                land_sound.play()
+                            state = next_state
+                            pending_action = None
+                            active_piece = None
 
-        renderer.draw(env.board, active_piece, active_x, active_y, score=score, lines=lines, level=level, next_piece=env.next_shape[0], game_over=game_over)
+            renderer.draw(env.board, active_piece, active_x, active_y, score=score, lines=lines, level=level, next_piece=env.next_shape[0], game_over=game_over)
 
-        if game_over and not printed_game_over:
-            print("Game Over")
-            game_over_sound.play()
-            printed_game_over = True
+            if game_over and not printed_game_over:
+                print("Game Over")
+                game_over_sound.play()
+                printed_game_over = True
 
-    dt = clock.tick(60)
+        dt = clock.tick(60)
+        await asyncio.sleep(0)
 
-pygame.quit()
+    pygame.quit()
+
+asyncio.run(main())
